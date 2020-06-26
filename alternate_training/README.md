@@ -2,109 +2,172 @@
 
 ### Quick Links
 
-[Source Code Details](#changes)
+[Changes](#changes)
 
 [Training Details](#training-procedure)
 
-[How to Run](#how-to-run)
+[Training Procedure](#how-to-run)
 
-The Wide-ResNet, Shake-Shake and ShakeDrop models with AutoAugment are some of the best-performing neural network architectures with the CIFAR-10 dataset. The original source code for these model implementations can be found here:
-
-https://github.com/tensorflow/models/tree/master/research/autoaugment
-
-As part of the The CIFAR-10.1 research, these models were trained and tested on CIFAR-10 achieving the following results:
-
-**Benchmark Performance on CIFAR-10**
-
-<center>
-
-| Model                       | Train Set | Test Set | Accuracy |
-| --------------------------- | --------- | -------- | -------- |
-| autoaug_pyramid_net_tf      | CIFAR-10  | CIFAR-10 | 98.4     |
-| autoaug_shake_shake_112_tf  | CIFAR-10  | CIFAR-10 | 98.1     |
-| autoaug_shake_shake_96_tf   | CIFAR-10  | CIFAR-10 | 98.0     |
-| autoaug_wrn_tf              | CIFAR-10  | CIFAR-10 | 97.5     |
-| autoaug_shake_shake_32_tf   | CIFAR-10  | CIFAR-10 | 97.3     |
+[Prepare For Inference](#prepare-inference)
 
 </center>
 
 <h2 id="changes">
-Changes to Original Source Code
+Train on Any Cloud Instance
 </h2>
 
-**Note:** minimal changes to the original code were required, merely to enable the optional training/testing on new datasets
+**Note:** all of the intro information outlined in the `autoaugment_tf/README.md` detailing modifications to the original source code still applies the code in this directory.
 
-The original source code, referenced in the link above, is designed to accept command line arguments and run training jobs for each model type with either CIFAR-10 or CIFAR-100 datasets. Specifically, the `data_utils.py` script has a `DataSet` class that is used to load CIFAR-10 training and test data, from the same directory, in Python batch format.
+The main difference is that **_this_** approach no longer utilizes a separate SageMaker Training Job script to launch the original training script. Here, we will simply start training with the training script itself.
 
-### data_utils.py
+**Note:** the training scripts in the `code` folder also differs from the SageMaker training code in that it incorporates additional data set names.
 
-* In order to load _new_ training and test sets, the models trained in this research use a modified version of the original `data_utils.py`. The modified code is designed to recognize new dataset names in order to load the intended input data according to their batch names and the corresponding number of examples.
+* **Additional dataset names:**
 
-* **New dataset names:**
+    * `cifar10_12k`: 12,000 subsample of original CIFAR-10; 10,000 train/2,000 test
 
-    * `cifar10_10k`: 10,000 subsample of original CIFAR-10; 8,000 train/2,000 test
-
-    * `cifar10_30k`: 30,000 subsample of original CIFAR-10; 24,000 train/6,000 test
-
-    * `cifar102`: 10,000 example dataset with mixture of new and original CIFAR-10 training images; 8,000 train/2,000 test
-
-    * `cifar102_30k`: 30,000 example dataset with mixture of new and original CIFAR-10 training images; 24,000 train/6,000 test
+    * `cifar105`: new dataset with 10,000 train/2,000 test
     
-**Note 1:** these dataset names occur in `data_utils.py`, `tf_models_ps.py`, and `train_cifar_ps.py`. A change in one location will require a change in all.
+**Note:** once again these dataset names occur in `data_utils.py`, `tf_models_ps.py`, and `train_cifar_ps.py`. A change in one location will require a change in all. If you wish to modify the SageMaker code in the previous directory to accept these new model names, you will need to adjust these files accordgingly.
 
-**Note 2:** while `data_utils.py` defines the physical shape of the input data, the `_setup_images_and_labels` method of the `CifarModel` class in `train_cifar_ps.py` defines the number of classes. This is because the original source code was designed for either CIFAR-10 or CIFAR-100. In our case all models are for classification of 10-classes, and the code has been modified to select such an architecture for all new dataset names.
-
-* **Data Preprocessing**
-
-   * Dataset preprocessing in the original code involved subtracting training dataset channel means and dividing by training dataset channel standard deviations. These values, for the originally intended datasets, are loaded from hard-coded variables provided from `augmentation_transforms.py`. In our approach, training dataset channel means and channel standard deviations for a specified training set are calculated when the training code instantiates an instance of the `DataSet` class.
-
-### helper_utils.py
-
-* `steps_per_epoch`: modified to be a value that is divided by the number of cluster workers; if more than one worker is assigned to    the training job, this modification speeds up training at the expense of potentially requiring additional epochs to converge to the same result as a single GPU training job.
+**Note:** `steps_per_epoch` modification necessary to improve distributed training on SageMaker has been commented out in this version of the code. This is necessary since there is no longer a SageMaker environment variable that defines number of GPUs. Instead, this version of the code is designed for a single GPU cloud instance, so the original implementation of the `steps_per_epoch` can be used.
 
 <h2 id="training-procedure">
 Training Environment
 </h2>
 
-* All models were trained via AWS SageMaker training jobs and ml.p3.2xlarge (1xTesla V100 GPU) instance types. Source data was saved in S3 buckets as pickle files in protocol 2 (Python 2). Since the code expects all data batches in the same location (folder), both training and testing batches for the same dataset were saved to the same S3 bucket path.
+* This code was used to train models on an IBM Cloud instance with a single Tesla V100 GPU and Ubuntu Linux 18.04 LTS Bionic Beaver Minimal Install (64 bit). To prepare the cloud instance NVIDIA GPU drivers, Docker, and nvidia-docker were installed.
 
-* Training jobs were launched from a lightweight ml.t2.medium instance
+Next the folder structure on the cloud instance was set up to match what the training code expetcts. Then, source data files in the `code` directory of this repo were added to the cloud isntance host machine, and necessary data files were copied onto the host machine from a Google Drive account.
+
+Finally, a Docker container with TensorFlow was launched and used to run the training procedure.
+
+Once model training was complete model checkpoints were downloaded to a local machine.
+
+The entire procedure is detailed below:
 
 ## Training Procedure
-
-For training tasks in our CIFAR-10.2 research the main training script `tf_models_ps.py` was created to launch SageMaker model training jobs for the TensorFlow AutoAugment models.
-
-This script receives command line arguments and in turn provides arguments that are needed for `train_cifar_ps.py`. The `ps` in the filenames refers to the optional distributed appraoch: parameter servers.
-
-To launch a training job, this script accepts a `workers` argument that will optionally run distributed training in AWS SageMaker. If `workers` is set to `1`, the model trains on a single GPU and the gradient updates are synchronous on that single GPU. If `workers` is set to a value greater than `1`, SageMaker will spin up a cluster of workers and utilize parameter servers to perform asynchronous gradient updates.
-
-**Note:** while distributed approaches sped up training time, some models did not converge to their previously published accuracy given default hyperparameter values. Specifically, without increasing the number of epochs, Wide-ResNet and Pyramid Net models underperformed published accuracy by ~0.5% each. All other models were within 0.2% of published accuracy using distributed learning and default hyperparameters. 
 
 <h2 id="how-to-run">
 Steps to Use This Code
 </h2>
 
-1. Store data in an S3 bucket
-2. Create a lightweight SageMaker instance with access to the bucket
-3. Ensure source code in `tf_models_ps.py`:
+1. Select a cloud provider and start an instance with a single V100 GPU and Ubuntu Linux 18.04
+2. ssh into the new cloud instance
+3. Install graphics drivers:
 
-   a. Uses your bucket name
+    ```
+    sudo add-apt-repository ppa:graphics-drivers
+    sudo apt-get update
+    sudo apt-get install nvidia-driver-418
+    sudo prime-select nvidia
+    ```
+4. Reboot instance (this will disconnect the ssh session):
 
-   b. Points to correct directories in S3 (e.g., both training and testing batches should reside within `s3://{bucket_name}/data/{dataset_name}/training`)
+    ````
+    sudo reboot
+    ````
+    
+5. Reconnect to instance once reboot is complete. Typically, a "connection refused" response under these circumstances indicates that the reboot has not completed. Try again in several minutes.
+6. Verify graphics drivers installed correctly:
+    ````
+    nvidia-smi
+    ````
+**Note:** if the graphics driver install worked you should see the nvidia-smi table that provides details about your GPU
 
-4. Ensure source code for `datafiles` variable in `data_utils.py` matches filename titles for your train and test batches 
+7. Install Docker:
+    ````
+    sudo apt-get update
+    
+    sudo apt-get install \
+        apt-transport-https \
+        ca-certificates \
+        curl \
+        gnupg-agent \
+        software-properties-common
+    
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    
+    sudo add-apt-repository \
+       "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+       $(lsb_release -cs) \
+       stable"
+   
+    sudo apt-get update
+   
+    sudo apt-get install docker-ce docker-ce-cli containerd.io
+   
+    sudo docker run hello-world
+    ````
+8. Install nvidia-docker2:
+    ```
+    curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | \
+      sudo apt-key add -
+  
+    distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+ 
+    curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+      sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+  
+    sudo apt-get update
 
-5. Start a training job from the SageMaker notebook instance command line prompt:
+    sudo apt-get install nvidia-docker2
 
-   - **ex:** `python tf_models_ps.py --model_name shake_shake_112 --train_data cifar102_30k --workers 1`
+    sudo pkill -SIGHUP dockerd
+    ```
+9. Create a `training` folder inside the cloud instance `tmp` directory. Make a `data` folder inside that directory as well:
+    ```
+    mkdir /tmp/training
+    mkdir /tmp/training/data
+    ```
+10. Create directories for whichever datasets you plan to train with. For example:
+    ```
+    mkdir /tmp/training/data/cifar10_12k
+    mkdir /tmp/training/data/cifar105
+    ```
+11. Change directories to the training folder and copy all of the scripts from the `code` folder in this repository
+12. Download data files to the cloud instance:
+    ```
+    # example: download data files from a Google Drive account
+    
+    wget --no-check-certificate <google drive url> -O   /tmp/training/data/<dataset name>/<file name>
+    ```
+    **Note:** both the training and testing sets need to be placed in the same destination folder. The training script will look for both of these files when it receives the `--data_path` argument provided with the training command.
+13. Start a TensorFlow Docker container and link it to the cloud instance directories for access to training scripts and data files:
+    ```
+    sudo docker run \
+       --name=autoaug -it -v /tmp/training:/tmp -p 5000:80 \
+       --runtime=nvidia tensorflow/tensorflow:1.14.0-gpu-py3 bash
+    ```
+14. Once inside the container use the bash prompt to navigate to the folder containing `train_cifar_ps.py`. Start training:
+    ```
+    python train_cifar_ps.py \
+       --model_name shake_shake_96 \
+       --data_path /tmp/data/cifar105 \
+       --checkpoint_dir /tmp/checkpoint \
+       --dataset cifar105 \
+       --use_cpu 0
+    ```
+    **Note:** note: training procedure will create 'checkpoint' folder if it does not already exist
+15. Once model training is complete, download the final checkpoints:
+    ```
+    # Example: using git bash to download from cloud instance to local Windows 10 machine
+    
+    scp -r root@<instance ip address>:/tmp/training/checkpoints/model/ "C:/Users/Brad/Downloads/ss32_cifar105"
+    ```
+16. When finished with checkpoint files in cloud instance and ready to train another model first clear the checkpoints folder:
+    ```
+    rm /tmp/checkpoints/model/*
+    ```
+**Note:** make sure to clear out the checkpoint folder prior to training a new model with a different architecture. The training code is designed to look for the presence of a checkpoint and start training from the last checkpoint if it finds one in the folder. If you finish training a model and then try to start training a new model with a different architecture, without first clearing out the old checkpoints, the training code will try to load an old checkpoint but it will casuse an error since the neural network architectures are different.
 
-6. When training completes trained models will be uploaded to an S3 bucket directory that is created according to the `base_job_name` parameter.
 
-   - **ex:** `ss112-cifar10-1-2020-04-15-15-38-14-319`
-      - **model:** shake_shake_112
-      - **train_data:** cifar10
-      - **workers:** 1
+<h2 id="prepare-inference">
+Preparing For Inference
+</h2>
 
+In order to use the checkpoints for inference, ensure that all checkpoint files are located in a folder named `model`, and then using a command prompt from within that folder, add everything to a `tar.gz` archive.
 
-
-
+    ```
+    tar -czvf model.tar.gz .
+    ```
