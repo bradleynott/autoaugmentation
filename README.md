@@ -4,7 +4,7 @@ This repository is a copy of one aspect of work I completed for my UC Berkeley M
 
 I adapted 5 TensorFlow Research models to accept new data sets and train on either AWS SageMaker training jobs, or alternatively train on any GPU-equipped cloud instance through the use of a Docker container with Tensorflow.
 
-An overview of necessary code adjustments and the AWS training approach is provided here. The `alternate_training` folder contains an explanation for training on a cloud instance configured from a bare bones Ubuntu installation.
+An overview of necessary code adjustments and the AWS training approach is provided here. The `alternate_training` directory contains an explanation for training on a cloud instance configured from a bare bones Ubuntu installation.
 
 Once the paper associated with this research effort is complete I will link to it here, as well as other code or presentation materials as they get approved by the remainder of the researchers involved.
 
