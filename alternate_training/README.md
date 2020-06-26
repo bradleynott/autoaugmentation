@@ -20,7 +20,7 @@ Train on Any Cloud Instance
 
 The main difference is that **_this_** approach no longer utilizes a separate SageMaker Training Job script to launch the original training script. Here, we will simply start training with the training script itself.
 
-Additionally, you will see in the commands below that this code now works in Python 3. The main training script contains a context management modification to allow this to work.
+Additionally, you will see in the commands below that this code now works in Python 3. This change was made with a modification of `train_cifar_ps.py` and `data_utils.py`. In the main training script, `train_cifar_ps.py`, code is added to replace `contextlib.nested` which is deprecated in Python 3. In  `data_utils.py` the `unpickle` function is modified to utilize the Python 3 `pickle` library in place of the Python 2 `cPickle` library.
 
 **Note:** the training scripts in the `code` folder also differs from the SageMaker training code in that it incorporates additional data set names.
 
