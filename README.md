@@ -1,6 +1,6 @@
 # Introduction
 
-This repository is a copy of one aspect of work I completed for my UC Berkeley Master of Information and Data Science Capstone project. During the project we needed to train a collection of neural network models on the original CIFAR-10 data set, as well as new data sets we created from the same source data used to create the original CIFAR-10 data set.
+This repository is a copy of one aspect of work I completed for my UC Berkeley Master of Information and Data Science Capstone project. During the project it was necessary to evaluate and train a collection of neural network models on the original CIFAR-10 data set, as well as new data sets we created from the same source data used to create the original CIFAR-10 data set.
 
 I adapted 5 TensorFlow Research models to accept new data sets and train on either AWS SageMaker training jobs, or alternatively train on any GPU-equipped cloud instance through the use of a Docker container with Tensorflow.
 
